@@ -5,6 +5,8 @@ Recursively scans PHP files and extracts if/elseif/else branch structures,
 nesting depths, and condition expressions using regex-based parsing.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import re

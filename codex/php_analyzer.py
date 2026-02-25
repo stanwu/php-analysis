@@ -308,7 +308,7 @@ def analyze_php_file(path: Path, root: Path) -> Tuple[str, FileReport]:
                     if_alt_stack.pop()
                 continue
 
-            cond: str | None = None
+            cond: Optional[str] = None
             block_style = "none"
             expected_open_pos: Optional[int] = None
             opens_alt = False
