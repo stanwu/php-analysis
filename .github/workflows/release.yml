@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Unit tests
+        run: |
+          make -C claude test
+          make -C codex test
+          make -C gemini test
+
+      - name: Package
+        run: |
+          name="PHP_Phraser-${GITHUB_REF_NAME}"
+          mkdir -p dist
+          zip -r "dist/${name}.zip" \
+            README.md README-claude.md README-codex.md README-gemini.md \
+            claude codex gemini \
+            -x "*/__pycache__/*" "*/.pytest_cache/*" "*/.ruff_cache/*" "*.pyc" ".git/*"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+
