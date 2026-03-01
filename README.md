@@ -1,4 +1,4 @@
-# php-analysis
+# PHP Analysis
 
 A PHP branch / nesting-complexity analyzer. It parses PHP source code using pure-Python regular expressions, counts `if / elseif / else` branches and nesting depth, and outputs a JSON report—**no PHP runtime or third-party libraries required**.
 
