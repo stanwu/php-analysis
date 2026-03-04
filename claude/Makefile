@@ -16,7 +16,7 @@ help:
 
 check:
 	$(PYTHON) -m py_compile $(SRC)
-	$(PYTHON) -m unittest -v
+	$(PYTHON) -m unittest discover -s $(TESTS) -v
 
 test: check
 

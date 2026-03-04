@@ -8,6 +8,7 @@ nesting depths, and condition expressions using regex-based parsing.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -106,9 +107,12 @@ def _indent_depth_at(original: str, line_no: int) -> int:
 def _analyse_file(path: Path) -> dict:
     """Parse a single PHP file and return its branch analysis."""
     try:
-        original = path.read_text(encoding='utf-8', errors='replace')
+        raw = path.read_bytes()
+        original = raw.decode('utf-8', errors='replace')
     except OSError as exc:
-        return {"error": str(exc), "max_depth": 0, "total_branches": 0, "branches": []}
+        return {"error": str(exc), "checksum": "", "max_depth": 0, "total_branches": 0, "branches": []}
+
+    checksum = hashlib.sha256(raw).hexdigest()
 
     clean = _strip_noise(original)
 
@@ -170,6 +174,7 @@ def _analyse_file(path: Path) -> dict:
     max_depth = max((b['depth'] for b in branches), default=0)
 
     return {
+        "checksum"      : checksum,
         "max_depth"     : max_depth,
         "total_branches": len(branches),
         "branches"      : branches,
@@ -272,6 +277,14 @@ def analyse_directory(root: Path) -> dict:
 
     print(' ' * 80, end='\r')   # clear progress line
 
+    # Detect duplicate files by checksum
+    checksum_map: dict[str, list[str]] = {}
+    for rel, data in files_report.items():
+        cs = data.get('checksum', '')
+        if cs:
+            checksum_map.setdefault(cs, []).append(rel)
+    duplicates = {cs: paths for cs, paths in checksum_map.items() if len(paths) > 1}
+
     # Build most-complex list
     ranked = sorted(
         files_report.items(),
@@ -293,6 +306,7 @@ def analyse_directory(root: Path) -> dict:
             "total_files"   : len(php_files),
             "total_branches": total_branches,
             "most_complex"  : most_complex,
+            "duplicates"    : duplicates,
         },
         "files": files_report,
     }
@@ -343,6 +357,17 @@ def print_summary(report: dict) -> None:
         branches = data.get('total_branches', 0)
         depth    = data.get('max_depth', 0)
         print(f"  {fname:<40} {branches:>5} branches  depth {depth}")
+
+    duplicates = summary.get('duplicates', {})
+    if duplicates:
+        print()
+        print('  Duplicate files (identical checksum):')
+        print('  ' + '-' * 56)
+        for cs, paths in duplicates.items():
+            print(f"  SHA256: {cs[:16]}…")
+            for p in paths:
+                print(f"    - {p}")
+        print()
 
     print('=' * 60)
     print()

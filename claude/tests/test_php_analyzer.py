@@ -2,6 +2,7 @@
 Unit tests for php_analyzer.py
 """
 
+import hashlib
 import shutil
 import sys
 import tempfile
@@ -298,6 +299,34 @@ class TestAnalyseFile(unittest.TestCase):
         assert global_entry is not None
         assert global_entry["total_branches"] == 1
 
+    def test_checksum_present(self):
+        php = "<?php\nif ($x) { }\n"
+        p = self._write_php(php)
+        result = _analyse_file(p)
+        expected = hashlib.sha256(php.encode("utf-8")).hexdigest()
+        assert result["checksum"] == expected
+
+    def test_checksum_stable(self):
+        php = "<?php\n$a = 1;\n"
+        p = self._write_php(php)
+        r1 = _analyse_file(p)
+        r2 = _analyse_file(p)
+        assert r1["checksum"] == r2["checksum"]
+
+    def test_checksum_differs_for_different_content(self):
+        p1 = self.tmp_path / "a.php"
+        p2 = self.tmp_path / "b.php"
+        p1.write_text("<?php\n$a = 1;\n", encoding="utf-8")
+        p2.write_text("<?php\n$a = 2;\n", encoding="utf-8")
+        r1 = _analyse_file(p1)
+        r2 = _analyse_file(p2)
+        assert r1["checksum"] != r2["checksum"]
+
+    def test_missing_file_has_empty_checksum(self):
+        p = self.tmp_path / "nonexistent.php"
+        result = _analyse_file(p)
+        assert result["checksum"] == ""
+
     def test_comment_if_not_counted(self):
         php = "<?php\n// if ($x) { }\n$y = 1;\n"
         p = self._write_php(php)
@@ -356,6 +385,43 @@ class TestAnalyseDirectory(unittest.TestCase):
         assert "total_files" in report["summary"]
         assert "total_branches" in report["summary"]
         assert "most_complex" in report["summary"]
+
+    def test_duplicates_key_present(self):
+        report = analyse_directory(self.tmp_path)
+        assert "duplicates" in report["summary"]
+
+    def test_no_duplicates_when_files_differ(self):
+        (self.tmp_path / "a.php").write_text("<?php\n$a = 1;\n", encoding="utf-8")
+        (self.tmp_path / "b.php").write_text("<?php\n$b = 2;\n", encoding="utf-8")
+        report = analyse_directory(self.tmp_path)
+        assert report["summary"]["duplicates"] == {}
+
+    def test_duplicates_detected(self):
+        content = "<?php\nif ($x) { }\n"
+        (self.tmp_path / "a.php").write_text(content, encoding="utf-8")
+        (self.tmp_path / "b.php").write_text(content, encoding="utf-8")
+        report = analyse_directory(self.tmp_path)
+        dupes = report["summary"]["duplicates"]
+        assert len(dupes) == 1
+        paths = list(dupes.values())[0]
+        assert sorted(paths) == ["a.php", "b.php"]
+
+    def test_duplicates_three_copies(self):
+        content = "<?php\n$x = 42;\n"
+        for name in ("x.php", "y.php", "z.php"):
+            (self.tmp_path / name).write_text(content, encoding="utf-8")
+        report = analyse_directory(self.tmp_path)
+        dupes = report["summary"]["duplicates"]
+        assert len(dupes) == 1
+        paths = list(dupes.values())[0]
+        assert len(paths) == 3
+
+    def test_file_checksum_in_report(self):
+        content = "<?php\n$a = 1;\n"
+        (self.tmp_path / "a.php").write_text(content, encoding="utf-8")
+        report = analyse_directory(self.tmp_path)
+        expected = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        assert report["files"]["a.php"]["checksum"] == expected
 
     def test_multiple_files_total_branches(self):
         for i in range(3):
